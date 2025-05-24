@@ -1,0 +1,232 @@
+"""
+Обработчики для AI-ассистента, интегрированного с Telegram-ботом
+"""
+
+import logging
+import asyncio
+from aiogram import Router, F
+from aiogram.types import Message, CallbackQuery
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+
+from rag_system import RAGAssistant
+from keyboards import get_main_menu
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Создаем роутер для AI-ассистента
+ai_assistant_router = Router()
+
+# Определяем состояния диалога
+class AssistantDialog(StatesGroup):
+    waiting_for_question = State()
+
+# Инициализируем RAG-ассистента
+try:
+    assistant = RAGAssistant()
+    logger.info("RAG-ассистент успешно инициализирован")
+except Exception as e:
+    logger.error(f"Ошибка при инициализации RAG-ассистента: {e}")
+    assistant = None
+
+# Функция для генерации реферальной ссылки
+def generate_referral_link(user_id: int) -> str:
+    """Генерирует персональную реферальную ссылку для пользователя."""
+    return f"https://potok.cash/ref/{user_id}"
+
+# Обработчик команды /assistant
+@ai_assistant_router.message(Command("assistant"))
+async def start_assistant(message: Message, state: FSMContext):
+    """Запускает диалог с AI-ассистентом"""
+    
+    if not assistant:
+        await message.answer(
+            "К сожалению, AI-ассистент временно недоступен. "
+            "Пожалуйста, попробуйте позже или обратитесь к администратору."
+        )
+        return
+    
+    # Получаем имя пользователя из сообщения
+    user_name = message.from_user.first_name if message.from_user else "Участник"
+    
+    await message.answer(
+        f"Здравствуйте, {user_name}! 👋\n\n"
+        f"Я AI-ассистент проекта «Поток Кеш». Задайте мне вопрос о проекте, "
+        f"потоках дохода, инвестиционных стратегиях или любой другой интересующий вас вопрос.\n\n"
+        f"Я помогу разобраться во всех аспектах нашей платформы и подскажу, как достичь финансовой свободы."
+    )
+    
+    await state.set_state(AssistantDialog.waiting_for_question)
+    
+    # Сохраняем информацию о пользователе в состоянии для использования в диалоге
+    user_data = {
+        "user_id": str(message.from_user.id),
+        "user_name": user_name,
+        "referral_link": generate_referral_link(message.from_user.id)
+    }
+    await state.update_data(user_data=user_data)
+
+# Добавляем новый обработчик для кнопки AI-ассистента
+@ai_assistant_router.callback_query(F.data == "ai_assistant")
+async def start_assistant_callback(callback: CallbackQuery, state: FSMContext):
+    """Запускает диалог с AI-ассистентом при нажатии на кнопку"""
+    
+    if not assistant:
+        await callback.message.answer(
+            "К сожалению, AI-ассистент временно недоступен. "
+            "Пожалуйста, попробуйте позже или обратитесь к администратору."
+        )
+        await callback.answer()
+        return
+    
+    # Получаем имя пользователя из callback_query
+    user_name = callback.from_user.first_name if callback.from_user else "Участник"
+    
+    await callback.message.answer(
+        f"Здравствуйте, {user_name}! 👋\n\n"
+        f"Я AI-ассистент проекта «Поток Кеш». Задайте мне вопрос о проекте, "
+        f"потоках дохода, инвестиционных стратегиях или любой другой интересующий вас вопрос.\n\n"
+        f"Я помогу разобраться во всех аспектах нашей платформы и подскажу, как достичь финансовой свободы."
+    )
+    
+    await state.set_state(AssistantDialog.waiting_for_question)
+    
+    # Сохраняем информацию о пользователе в состоянии для использования в диалоге
+    user_data = {
+        "user_id": str(callback.from_user.id),
+        "user_name": user_name,
+        "referral_link": generate_referral_link(callback.from_user.id)
+    }
+    await state.update_data(user_data=user_data)
+    
+    await callback.answer()
+
+# Обработчик вопросов к ассистенту
+@ai_assistant_router.message(AssistantDialog.waiting_for_question)
+async def process_question(message: Message, state: FSMContext):
+    """Обрабатывает вопрос пользователя и отправляет ответ от AI-ассистента"""
+    
+    if not assistant:
+        await message.answer(
+            "К сожалению, AI-ассистент временно недоступен. "
+            "Пожалуйста, попробуйте позже или обратитесь к администратору."
+        )
+        return
+    
+    # Получаем запрос пользователя
+    user_query = message.text
+    
+    # Получаем данные пользователя из состояния
+    data = await state.get_data()
+    user_data = data.get("user_data", {})
+    
+    # Получаем идентификатор пользователя для отслеживания истории диалога
+    user_id = user_data.get("user_id", str(message.from_user.id))
+    
+    # Создаем контекст пользователя
+    user_info = {
+        "name": user_data.get("user_name", message.from_user.first_name if message.from_user else "Участник"),
+        "id": user_id,
+        "referral_link": user_data.get("referral_link", generate_referral_link(int(user_id)))
+    }
+    
+    # Отправляем индикатор набора текста
+    await message.bot.send_chat_action(message.chat.id, "typing")
+    
+    # Максимальное количество попыток получить ответ
+    max_attempts = 2
+    current_attempt = 0
+    
+    while current_attempt < max_attempts:
+        try:
+            # Получаем ответ от RAG-системы (используем asyncio чтобы не блокировать бота)
+            response = await asyncio.to_thread(
+                assistant.answer_query, 
+                user_query, 
+                user_info,
+                user_id  # Передаем user_id для отслеживания истории диалога
+            )
+            
+            # Если получили сообщение об ошибке от системы, пробуем еще раз
+            if "Извините, возникли технические проблемы" in response and current_attempt < max_attempts - 1:
+                current_attempt += 1
+                logger.warning(f"Получено сообщение об ошибке от RAG-системы. Попытка {current_attempt+1}")
+                await message.bot.send_chat_action(message.chat.id, "typing")
+                await asyncio.sleep(1.5)  # Небольшая пауза перед повторной попыткой
+                continue
+            
+            # Ставим разумный лимит на длину ответа
+            max_length = 4000
+            if len(response) > max_length:
+                response = response[:max_length] + "...\n(ответ был сокращен из-за ограничений Telegram)"
+            
+            # Отправляем ответ пользователю
+            await message.answer(response)
+            
+            # Логируем запрос и ответ
+            logger.info(f"Запрос пользователя {user_id}: {user_query}")
+            logger.info(f"Ответ для пользователя {user_id}: {response[:100]}...")
+            
+            # Если успешно получили ответ, выходим из цикла
+            break
+            
+        except Exception as e:
+            current_attempt += 1
+            error_msg = str(e) if str(e) else "Неизвестная ошибка"
+            logger.error(f"Ошибка при обработке запроса (попытка {current_attempt}/{max_attempts}): {error_msg}")
+            
+            # Если это не последняя попытка, пробуем еще раз
+            if current_attempt < max_attempts:
+                await message.bot.send_chat_action(message.chat.id, "typing")
+                await asyncio.sleep(1.5)  # Пауза перед повторной попыткой
+                continue
+            
+            # Если все попытки исчерпаны, отправляем сообщение об ошибке
+            await message.answer(
+                "Извините, произошла ошибка при обработке вашего запроса. "
+                "Пожалуйста, попробуйте еще раз через несколько секунд."
+            )
+            break
+
+# Обработчик команды для выхода из режима ассистента
+@ai_assistant_router.message(Command("exit"))
+async def exit_assistant(message: Message, state: FSMContext):
+    """Выход из режима ассистента"""
+    
+    current_state = await state.get_state()
+    if current_state == AssistantDialog.waiting_for_question.state:
+        await state.clear()
+        await message.answer(
+            "Вы вышли из режима AI-ассистента. Спасибо за общение!",
+            reply_markup=get_main_menu()
+        )
+    else:
+        await message.answer(
+            "Вы не находитесь в режиме AI-ассистента.",
+            reply_markup=get_main_menu()
+        )
+
+# Обработчик команды для очистки истории диалога
+@ai_assistant_router.message(Command("clear_history"))
+async def clear_history(message: Message, state: FSMContext):
+    """Очищает историю диалога с пользователем"""
+    
+    if not assistant:
+        await message.answer(
+            "К сожалению, AI-ассистент временно недоступен. "
+            "Пожалуйста, попробуйте позже или обратитесь к администратору."
+        )
+        return
+    
+    user_id = str(message.from_user.id)
+    
+    # Очищаем историю диалога
+    if user_id in assistant.dialog_histories:
+        assistant.dialog_histories[user_id] = assistant.get_user_history(user_id)
+        
+    await message.answer(
+        "История диалога очищена. Можете начать общение заново!"
+    ) 
