@@ -8,6 +8,8 @@ import tempfile
 import subprocess
 from pathlib import Path
 import asyncio
+# Патч для исправления ошибки torch.get_default_device
+import whisper_patch
 import whisper  # Используем локальную версию Whisper
 from dotenv import load_dotenv
 

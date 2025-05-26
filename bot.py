@@ -1,3 +1,6 @@
+# Патч для исправления ошибки torch.get_default_device
+import whisper_patch
+
 import asyncio
 import logging
 from datetime import datetime

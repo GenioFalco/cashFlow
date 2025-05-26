@@ -1,0 +1,9 @@
+pandas==2.2.1
+openpyxl==3.1.2
+tqdm==4.66.2
+sentence-transformers==2.5.1
+scikit-learn==1.4.1.post1
+numpy==1.26.4
+torch==2.0.1
+setuptools>=69.1.1
+wheel>=0.42.0 

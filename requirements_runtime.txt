@@ -1,0 +1,9 @@
+aiogram==3.3.0
+python-dotenv==1.0.1
+faiss-cpu==1.7.4
+google-generativeai==0.3.2
+openai-whisper==20231117
+ffmpeg-python==0.2.0
+torch==2.0.1
+transformers==4.38.2
+numpy==1.26.4 
