@@ -293,23 +293,66 @@ class RAGAssistant:
     
     def answer_query(self, query: str, user_info: Optional[Dict[str, Any]] = None, user_id: Optional[str] = None) -> str:
         """
-        Отвечает на запрос пользователя, используя RAG-подход.
+        Отвечает на запрос пользователя с использованием RAG-подхода.
         
         Args:
             query: Запрос пользователя
-            user_info: Информация о пользователе (опционально)
-            user_id: Идентификатор пользователя для отслеживания истории диалога (опционально)
+            user_info: Информация о пользователе (имя, реферальная ссылка и т.д.)
+            user_id: Идентификатор пользователя для отслеживания истории диалога
             
         Returns:
             Ответ на запрос
         """
-        # Получаем историю диалога, если есть user_id
-        history = None
-        if user_id:
-            history = self.get_user_history(user_id)
+        # Получаем историю диалога для пользователя, если есть user_id
+        history = self.get_user_history(user_id) if user_id else None
         
         # Определяем, является ли это первым сообщением в диалоге
         is_first_message = history is None or len(history.messages) == 0
+        
+        # Проверяем, является ли запрос вопросом о Васадине
+        if is_vasadin_query(query):
+            # Создаем специальный запрос для поиска информации о Васадине
+            vasadin_search_query = "Дмитрий Васадин основатель проекта"
+            
+            # Получаем релевантные документы о Васадине из базы знаний
+            vasadin_docs = self.retrieve(vasadin_search_query, k=3)
+            
+            # Создаем специальный промпт для ответа о Васадине
+            vasadin_prompt = f"""
+Пользователь спрашивает о Дмитрии Васадине, основателе проекта PotokCash.
+Используй следующую информацию для ответа:
+{self._format_context(vasadin_docs)}
+
+Важно:
+1. Обязательно укажи, что Дмитрий Васадин - основатель проекта PotokCash (Поток Кеш) и компании Меркурий
+2. Объясни, с какой целью он создал проект
+3. Если есть информация о его Telegram-канале, укажи её
+4. Ответ должен быть кратким, но информативным
+
+Вопрос пользователя: {query}
+"""
+            
+            # Генерируем ответ с помощью Gemini
+            try:
+                response = self.gemini_model.generate_content(vasadin_prompt)
+                vasadin_response = response.text
+                
+                # Сохраняем в историю диалога
+                if user_id:
+                    history.add_message("user", query)
+                    history.add_message("assistant", vasadin_response)
+                
+                return vasadin_response
+            except Exception as e:
+                logging.error(f"Ошибка при генерации ответа о Васадине: {e}")
+                # Если произошла ошибка, возвращаем запасной вариант ответа
+                fallback_response = "Дмитрий Васадин — основатель проекта PotokCash (Поток Кеш) и компании Меркурий. Он создал эту платформу с целью дать людям возможность достичь финансовой независимости. Его Telegram-канал: https://t.me/kodvasadin"
+                
+                if user_id:
+                    history.add_message("user", query)
+                    history.add_message("assistant", fallback_response)
+                
+                return fallback_response
         
         # Проверяем тип запроса
         if is_referral_request(query):
@@ -441,6 +484,17 @@ class RAGAssistant:
             source = doc["metadata"]["source"].replace("_", " ")
             context_str += f"### {source}: \n{doc['text']}\n\n"
         return context_str
+
+# Добавляем функцию для определения запросов о Васадине
+def is_vasadin_query(query: str) -> bool:
+    """Определяет, является ли запрос вопросом о Дмитрии Васадине."""
+    vasadin_keywords = [
+        "васадин", "дмитрий васадин", "основатель", "создатель", "дмитрий", 
+        "кто такой васадин", "васадин кто", "кто основатель", "основатель проекта",
+        "создатель проекта", "кто создал", "кто создатель"
+    ]
+    query_lower = query.lower()
+    return any(keyword in query_lower for keyword in vasadin_keywords)
 
 # Добавляем функцию для определения запросов о реферальных ссылках
 def is_referral_request(query: str) -> bool:

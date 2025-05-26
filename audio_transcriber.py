@@ -25,7 +25,7 @@ class AudioTranscriber:
     Класс для транскрибирования аудио с помощью локальной версии Whisper
     """
     
-    def __init__(self, model_name="small"):
+    def __init__(self, model_name="base"):
         """
         Инициализация транскрибера
         
