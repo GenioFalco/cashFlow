@@ -12,8 +12,9 @@ from accumulative_flow_handlers import accumulative_flow_router
 from config import BOT_TOKEN
 from handlers import router
 from fast_flow_handlers import fast_flow_router
-from middlewares import LoggingMiddleware
+from middlewares import LoggingMiddleware, UserSavingMiddleware
 from ai_assistant_handlers import ai_assistant_router  # Новый импорт для AI-ассистента
+from broadcast_handlers import broadcast_router, init_db  # Импорт для функционала рассылки
 
 # Импортируем функцию обновления курсов
 try:
@@ -73,12 +74,17 @@ async def main():
     
     # Регистрируем промежуточные обработчики
     dp.update.middleware(LoggingMiddleware())
+    dp.update.middleware(UserSavingMiddleware())  # Добавляем middleware для сохранения пользователей
+    
+    # Инициализируем базу данных пользователей
+    init_db()
     
     # Регистрируем обработчики
     dp.include_router(router)
     dp.include_router(fast_flow_router)  # Добавляем роутер быстрого потока
     dp.include_router(accumulative_flow_router)  # Добавляем роутер накопительного потока
     dp.include_router(ai_assistant_router)  # Добавляем роутер AI-ассистента
+    dp.include_router(broadcast_router)  # Добавляем роутер для функционала рассылки
     
     
     # Игнорируем старые обновления

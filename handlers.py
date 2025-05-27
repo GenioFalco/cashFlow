@@ -39,13 +39,27 @@ router = Router()
 async def cmd_start(message: Message):
     # Получаем имя пользователя для приветствия
     user_name = message.from_user.first_name if message.from_user and message.from_user.first_name else "пользователь"
+    user_id = message.from_user.id if message.from_user else None
+    
+    # Добавляем пользователя в базу данных
+    try:
+        from broadcast_handlers import add_user_to_db
+        add_user_to_db(
+            user_id=user_id,
+            username=message.from_user.username if message.from_user else None,
+            first_name=message.from_user.first_name if message.from_user else None,
+            last_name=message.from_user.last_name if message.from_user else None,
+            chat_id=message.chat.id
+        )
+    except ImportError:
+        pass
     
     await message.answer(
         f"{user_name}, здравствуйте! 🤝 Меня зовут Василий. Я автоматическая система помощи\n\n"
         f"Сохраните меня в отдельную папку или закрепите вверху, что бы не потерять\n\n"
         f"Выберите один из пунктов ниже\n\n"
         f"👇👇👇",
-        reply_markup=get_main_menu()
+        reply_markup=get_main_menu(user_id)
     )
 
 # Обработчик нажатия на кнопку главного меню
@@ -53,12 +67,13 @@ async def cmd_start(message: Message):
 async def back_to_main(callback: CallbackQuery, state: FSMContext):
     # Получаем имя пользователя для приветствия
     user_name = callback.from_user.first_name if callback.from_user and callback.from_user.first_name else "пользователь"
+    user_id = callback.from_user.id if callback.from_user else None
     
     await state.clear()
     await callback.message.answer(
         f"{user_name}, выберите один из пунктов ниже\n\n"
         f"👇👇👇",
-        reply_markup=get_main_menu()
+        reply_markup=get_main_menu(user_id)
     )
     await callback.answer()
 

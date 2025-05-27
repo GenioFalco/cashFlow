@@ -1,8 +1,11 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from config import CURRENCY_SYMBOLS, CURRENCY_NAMES
 
+# ID администраторов, которым доступна функция рассылки
+ADMIN_IDS = [5019370347, 854880510]
+
 # Главное меню
-def get_main_menu() -> InlineKeyboardMarkup:
+def get_main_menu(user_id: int = None) -> InlineKeyboardMarkup:
     keyboard = [
         [InlineKeyboardButton(text="🎮 СИМУЛЯТОРЫ | SIMULATORS", callback_data="simulators")],
         [InlineKeyboardButton(text="💰 ДЕНЕЖНЫЕ ПОТОКИ | MONEY FLOWS", callback_data="money_flows")],
@@ -11,6 +14,11 @@ def get_main_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📱 СОЦИАЛЬНЫЕ СЕТИ | SOCIAL NETWORKS", callback_data="social_networks")],
         [InlineKeyboardButton(text="✍️ НАПИСАТЬ МНЕ | WRITE TO ME", url="https://t.me/konvict171")]
     ]
+    
+    # Добавляем кнопку рассылки только для администраторов
+    if user_id in ADMIN_IDS:
+        keyboard.append([InlineKeyboardButton(text="📢 РАЗОСЛАТЬ СООБЩЕНИЕ", callback_data="broadcast_message")])
+    
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
