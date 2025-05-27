@@ -36,10 +36,13 @@ router = Router()
 
 # Обработчик команды /start
 @router.message(Command("start"))
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, state: FSMContext):
     # Получаем имя пользователя для приветствия
     user_name = message.from_user.first_name if message.from_user and message.from_user.first_name else "пользователь"
     user_id = message.from_user.id if message.from_user else None
+    
+    # Очищаем все состояния, включая состояние AI-ассистента
+    await state.clear()
     
     # Добавляем пользователя в базу данных
     try:
@@ -69,7 +72,9 @@ async def back_to_main(callback: CallbackQuery, state: FSMContext):
     user_name = callback.from_user.first_name if callback.from_user and callback.from_user.first_name else "пользователь"
     user_id = callback.from_user.id if callback.from_user else None
     
+    # Очищаем все состояния, включая состояние AI-ассистента
     await state.clear()
+    
     await callback.message.answer(
         f"{user_name}, выберите один из пунктов ниже\n\n"
         f"👇👇👇",
