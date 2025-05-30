@@ -209,16 +209,12 @@ async def confirm_amount(callback: CallbackQuery, state: FSMContext):
         # Рассчитываем новое начисление для этого депозита
         deposit["daily_income"] = deposit["bonus_amount"] * (deposit["percent"] / 100)
     
-    # Пересчитываем общее начисление как сумму начислений всех депозитов
-    new_total_income = 0
-    for deposit in flow_data.deposits:
-        new_total_income += deposit["daily_income"]
-    
-    # Обновляем общее ежедневное начисление с округлением до 2 знаков только для отображения
-    flow_data.daily_income = round(new_total_income * 100) / 100
-    
     # В первый день процент устанавливается на 0.31%
     flow_data.income_percent = 0.31
+    
+    # Рассчитываем начисление из процента и суммы в потоке
+    # Это гарантирует точное соответствие между процентом и начислением
+    flow_data.daily_income = round((flow_data.total_amount * flow_data.income_percent / 100) * 100) / 100
     
     # Логируем результат для отладки
     print(f"[ПОСЛЕ ПОДТВЕРЖДЕНИЯ] День: {flow_data.day_counter}")
@@ -273,28 +269,24 @@ async def add_income(callback: CallbackQuery, state: FSMContext):
     # Увеличиваем счетчик дней
     flow_data.day_counter += 1
     
-    # Пересчитываем общее ежедневное начисление как сумму начислений всех депозитов
-    new_total_income = 0
+    # Сначала рассчитываем общее начисление как сумму начислений всех депозитов
+    total_daily_income = 0
     for deposit in flow_data.deposits:
-        new_total_income += deposit["daily_income"]
+        total_daily_income += deposit["daily_income"]
     
-    # Обновляем общее ежедневное начисление с округлением до 2 знаков только для отображения
-    flow_data.daily_income = round(new_total_income * 100) / 100
+    # Округляем начисление до двух знаков после запятой
+    flow_data.daily_income = round(total_daily_income * 100) / 100
     
-    # Рассчитываем средневзвешенный процент для отображения (для наглядности)
+    # Теперь рассчитываем процент как отношение начисления к сумме в потоке
     if flow_data.total_amount > 0:
-        avg_percent = 0
-        deposit_count = len(flow_data.deposits)
-        if deposit_count > 0:
-            avg_percent = sum(deposit["percent"] for deposit in flow_data.deposits) / deposit_count
-        flow_data.income_percent = avg_percent
+        flow_data.income_percent = round((flow_data.daily_income / flow_data.total_amount * 100) * 100) / 100
     
     # Логируем результат для отладки
     print(f"[ПОСЛЕ НАЧИСЛЕНИЯ] День: {flow_data.day_counter}")
     print(f"Сумма в потоке: {flow_data.total_amount:.2f}")
     print(f"Новое ежедневное начисление: {flow_data.daily_income:.2f}")
     print(f"Копилка после: {flow_data.savings:.2f}")
-    print(f"Средневзвешенный процент: {flow_data.income_percent:.2f}%")
+    print(f"Процент: {flow_data.income_percent:.2f}%")
     
     await state.update_data(flow_data=flow_data)
     
