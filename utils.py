@@ -194,33 +194,54 @@ def withdraw_savings(flow_data: FlowData, amount: float) -> FlowData:
     
     # Если сняли все средства из копилки, сбрасываем проценты до начального
     if flow_data.savings <= 0:
-        new_percent = INITIAL_PERCENT
-        
         # Сбрасываем процент для каждого депозита
         for deposit in flow_data.deposits:
             deposit["percent"] = INITIAL_PERCENT
             deposit["daily_income"] = deposit["bonus_amount"] * (deposit["percent"] / 100)
+        
+        # Устанавливаем начальный процент
+        flow_data.income_percent = INITIAL_PERCENT
     else:
-        # При частичном снятии пропорционально снижаем процент для каждого депозита
-        for deposit in flow_data.deposits:
-            # Сохраняем текущий процент депозита
-            current_deposit_percent = deposit["percent"]
-            
-            # Уменьшаем пропорционально
-            deposit["percent"] = current_deposit_percent - (current_deposit_percent - INITIAL_PERCENT) * withdrawal_ratio
-            
-            # Пересчитываем ежедневный доход для депозита
-            deposit["daily_income"] = deposit["bonus_amount"] * (deposit["percent"] / 100)
+        # При частичном снятии пропорционально снижаем процент
+        # Рассчитываем новый процент по формуле оригинального бота
+        # Новый процент = текущий - (текущий - начальный) * доля_снятых_средств
+        new_percent = current_percent - (current_percent - INITIAL_PERCENT) * withdrawal_ratio
+        
+        # Округляем новый процент до 2 знаков после запятой
+        # Используем специальное округление для точного соответствия оригинальному боту
+        new_percent = int(new_percent * 100 + 0.5) / 100
+        
+        # Устанавливаем этот процент как текущий
+        flow_data.income_percent = new_percent
+        
+        # Рассчитываем новое начисление напрямую из процента и суммы в потоке
+        # Это обеспечивает точное соответствие между процентом и начислением
+        new_daily_income = (flow_data.total_amount * new_percent / 100)
+        
+        # Распределяем это начисление между депозитами пропорционально их бонусным суммам
+        total_bonus_amount = sum(deposit["bonus_amount"] for deposit in flow_data.deposits)
+        
+        if total_bonus_amount > 0:
+            for deposit in flow_data.deposits:
+                deposit_ratio = deposit["bonus_amount"] / total_bonus_amount
+                deposit["daily_income"] = new_daily_income * deposit_ratio
+                
+                # Обратно рассчитываем процент для депозита
+                if deposit["bonus_amount"] > 0:
+                    deposit["percent"] = (deposit["daily_income"] / deposit["bonus_amount"]) * 100
+                else:
+                    deposit["percent"] = INITIAL_PERCENT
+        else:
+            for deposit in flow_data.deposits:
+                deposit["percent"] = INITIAL_PERCENT
+                deposit["daily_income"] = 0
     
     # Пересчитываем общее ежедневное начисление как сумму начислений всех депозитов
+    # и округляем его специальным образом для точного соответствия оригинальному боту
     total_daily_income = sum(deposit["daily_income"] for deposit in flow_data.deposits)
-    flow_data.daily_income = round(total_daily_income * 100) / 100
     
-    # Рассчитываем точный процент как отношение начисления к сумме в потоке
-    if flow_data.total_amount > 0:
-        flow_data.income_percent = round((flow_data.daily_income / flow_data.total_amount * 100) * 100) / 100
-    else:
-        flow_data.income_percent = INITIAL_PERCENT
+    # Специальное округление для соответствия оригинальному боту
+    flow_data.daily_income = int((total_daily_income + 0.005) * 100) / 100
     
     print(f"Снятие из копилки: {amount:.2f}, новый процент: {flow_data.income_percent:.2f}%, новое начисление: {flow_data.daily_income:.2f}")
     
@@ -243,14 +264,21 @@ def format_daily_stats(flow_data: FlowData) -> str:
     print(f"Форматирование статистики: бонусный множитель {flow_data.bonus_percent}, отображаемый процент {display_percent}%, ECR: {ecr_count:.2f}")
     print(f"Formatting statistics: bonus multiplier {flow_data.bonus_percent}, displayed percentage {display_percent}%, ECR: {ecr_count:.2f}")
     print(f"Текущее начисление: {flow_data.daily_income:.2f}, процент: {flow_data.income_percent:.2f}%")
+    
+    # Специальное округление для соответствия оригинальному боту
+    init_amount = int((flow_data.init_amount + 0.005) * 100) / 100
+    total_amount = int((flow_data.total_amount + 0.005) * 100) / 100
+    daily_income = int((flow_data.daily_income + 0.005) * 100) / 100
+    savings = int((flow_data.savings + 0.005) * 100) / 100
+    withdrawn = int((flow_data.withdrawn + 0.005) * 100) / 100
 
     message = (
         f"*День | Day: {flow_data.day_counter}*\n\n"
-        f"Внесено | Added: *{flow_data.init_amount:.2f}*{currency_symbol}\n"
-        f"В потоке| Stream amount: *{flow_data.total_amount:.2f}*{currency_symbol}\n"
-        f"Начисление | Income: *{flow_data.daily_income:.2f}*{currency_symbol} (*{flow_data.income_percent:.2f}*%)\n"
-        f"Копилка | piggy bank: *{flow_data.savings:.2f}*{currency_symbol}\n"
-        f"Выведено | Withdrawn: *{flow_data.withdrawn:.2f}*{currency_symbol}"
+        f"Внесено | Added: *{init_amount:.2f}*{currency_symbol}\n"
+        f"В потоке| Stream amount: *{total_amount:.2f}*{currency_symbol}\n"
+        f"Начисление | Income: *{daily_income:.2f}*{currency_symbol} (*{flow_data.income_percent:.2f}*%)\n"
+        f"Копилка | piggy bank: *{savings:.2f}*{currency_symbol}\n"
+        f"Выведено | Withdrawn: *{withdrawn:.2f}*{currency_symbol}"
     )
     
     return message
